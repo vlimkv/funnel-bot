@@ -263,6 +263,14 @@ async def send_article_flat_belly(cb: CallbackQuery):
     )
     await cb.answer()
 
+@router.callback_query(F.data == "article_microbiome")
+async def send_article_microbiome(cb: CallbackQuery):
+    doc = FSInputFile("files/microbiome.pdf")
+    await cb.message.answer_document(
+        document=doc,
+        caption="Микробиом кишечника: что влияет на живот глубже, чем кажется"
+    )
+    await cb.answer()
 
 # --- Раздел: О программе «Тазовое Дно» ---
 

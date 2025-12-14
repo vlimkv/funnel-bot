@@ -113,10 +113,6 @@ def free_trainings_kb() -> InlineKeyboardMarkup:
 # --- Раздел: статьи и гайды ---
 
 def articles_guides_kb() -> InlineKeyboardMarkup:
-    """
-    Кнопки для выбора PDF/материала + назад.
-    Пока отправляем текст, PDF можно прикрутить позже.
-    """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -128,6 +124,12 @@ def articles_guides_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(
                 text="Плоский живот: в чём настоящая причина",
                 callback_data="article_flat_belly"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="Микробиом кишечника и при чём здесь живот",
+                callback_data="article_microbiome"
             )
         ],
         [
