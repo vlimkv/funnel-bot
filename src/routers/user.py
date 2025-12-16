@@ -277,15 +277,15 @@ async def send_article_csection_apron(cb: CallbackQuery):
         "assets/articles/csection/8.jpg",
     ]
 
-    album = MediaGroupBuilder()
-
-    for i, p in enumerate(paths):
-        if i == 0:
-            album.add_photo(media=FSInputFile(p), caption=ARTICLE_CSECTION_APRON_TEXT)
-        else:
-            album.add_photo(media=FSInputFile(p))
+    album = MediaGroupBuilder(
+        caption="<b>Кесарево сечение и «фартук»</b>\nКоротко о том, что важно знать."
+    )
+    album.add_photo(media=FSInputFile(paths[0]))
+    for p in paths[1:]:
+        album.add_photo(media=FSInputFile(p))
 
     await cb.message.answer_media_group(media=album.build())
+    await cb.message.answer(ARTICLE_CSECTION_APRON_TEXT)
     await cb.answer()
 
 @router.callback_query(F.data == "article_microbiome")
