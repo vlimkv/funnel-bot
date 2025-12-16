@@ -115,9 +115,9 @@ async def main():
         # Запуск в режиме polling
         logger.info("Starting polling...")
         await dp.start_polling(
-            bot, 
+            bot,
             allowed_updates=dp.resolve_used_update_types(),
-            drop_pending_updates=True
+            drop_pending_updates=False
         )
             
     except Exception as e:

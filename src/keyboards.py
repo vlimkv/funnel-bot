@@ -134,6 +134,12 @@ def articles_guides_kb() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
+                text="Кесарево сечение и «фартук»: что важно знать",
+                callback_data="article_csection_apron"
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text="🔙 Назад",
                 callback_data="menu_main"
             )

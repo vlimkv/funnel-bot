@@ -4,6 +4,7 @@ from aiogram.types import Message, CallbackQuery, FSInputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.utils.media_group import MediaGroupBuilder
 from ..config import Config
 from .. import db
 from ..keyboards import (
@@ -17,7 +18,7 @@ from ..keyboards import (
 from ..texts import (
     FREEBIE_SENT, CONTACT_ASK, CONTACT_THX, DONT_UNDERSTAND,
     MAIN_MENU_TEXT, FREE_TRAININGS_TEXT, ARTICLES_GUIDES_TEXT,
-    PROGRAM_PELVIC_FLOOR_TEXT, PROGRAM_FOR_WHOM_TEXT, PROGRAM_WHAT_YOU_GET_TEXT,
+    PROGRAM_PELVIC_FLOOR_TEXT, PROGRAM_FOR_WHOM_TEXT, PROGRAM_WHAT_YOU_GET_TEXT, ARTICLE_CSECTION_APRON_TEXT,
 )
 from ..utils import RE_FREEBIE, RE_CONTACT, RE_EMAIL, extract_phone, extract_name
 
@@ -261,6 +262,30 @@ async def send_article_flat_belly(cb: CallbackQuery):
         document=doc,
         caption="Секреты плоского живота: научный разбор причин"
     )
+    await cb.answer()
+
+@router.callback_query(F.data == "article_csection_apron")
+async def send_article_csection_apron(cb: CallbackQuery):
+    paths = [
+        "assets/articles/csection/1.jpg",
+        "assets/articles/csection/2.jpg",
+        "assets/articles/csection/3.jpg",
+        "assets/articles/csection/4.jpg",
+        "assets/articles/csection/5.jpg",
+        "assets/articles/csection/6.jpg",
+        "assets/articles/csection/7.jpg",
+        "assets/articles/csection/8.jpg",
+    ]
+
+    album = MediaGroupBuilder()
+
+    for i, p in enumerate(paths):
+        if i == 0:
+            album.add_photo(media=FSInputFile(p), caption=ARTICLE_CSECTION_APRON_TEXT)
+        else:
+            album.add_photo(media=FSInputFile(p))
+
+    await cb.message.answer_media_group(media=album.build())
     await cb.answer()
 
 @router.callback_query(F.data == "article_microbiome")
