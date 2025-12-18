@@ -176,3 +176,11 @@ def program_pelvic_floor_kb() -> InlineKeyboardMarkup:
             )
         ],
     ])
+
+WELCOME_VIDEO_URL = "https://youtu.be/9-VN65VmMt4?si=sTYxPCEa-TDJhnhn"
+
+def welcome_video_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="▶️ Смотреть видео", url=WELCOME_VIDEO_URL)],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu_main")],
+    ])

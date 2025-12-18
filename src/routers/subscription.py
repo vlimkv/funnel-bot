@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from ..config import Config
 from .. import db
-from ..keyboards import main_kb, siren_youtube_kb, siren_presale_kb, main_menu_kb
+from ..keyboards import main_kb, siren_youtube_kb, siren_presale_kb, main_menu_kb, welcome_video_kb
 from ..texts import (
     SUBSCRIPTION_REQUIRED,
     SUBSCRIPTION_SUCCESS,
@@ -13,7 +13,8 @@ from ..texts import (
     DIASTASIS_GUIDE,
     SIREN_WELCOME,
     SIREN_PRESALE, WELCOME_PF_HTML, ALBUM_ASSETS,
-    MAIN_MENU_TEXT,   # <— твой новый текст для главного меню
+    MAIN_MENU_TEXT,
+    WELCOME_VIDEO_TEXT,
 )
 import asyncio
 import os
@@ -21,7 +22,6 @@ import logging
 
 router = Router()
 
-# ID канала для проверки подписки
 CHANNEL_USERNAME = "@sezaamankeldii"
 
 def subscription_kb() -> InlineKeyboardMarkup:
@@ -90,32 +90,30 @@ async def cmd_start(msg: Message, state: FSMContext):
 
     # Проверка подписки
     if await is_subscribed(msg.bot, uid):
-        # ✅ НОВОЕ ГЛАВНОЕ МЕНЮ
-        await msg.answer(
-            MAIN_MENU_TEXT,
-            reply_markup=main_menu_kb()
-        )
-        # если хочешь, можно дополнительно отправить альбом:
-        # await send_start_album(msg)
+        await msg.answer(WELCOME_VIDEO_TEXT, reply_markup=welcome_video_kb(), parse_mode="HTML")
+
+        await msg.answer(MAIN_MENU_TEXT, reply_markup=main_menu_kb())
     else:
         await msg.answer(SUBSCRIPTION_REQUIRED, reply_markup=subscription_kb())
 
 @router.callback_query(F.data == "check_subscription")
 async def check_subscription(cb: CallbackQuery):
-    """Проверка подписки по кнопке"""
     uid = cb.from_user.id
 
     if await is_subscribed(cb.bot, uid):
         await cb.answer("✅ Отлично! Теперь ты с нами 🤍", show_alert=False)
 
-        # сразу показываем главное меню
-        await cb.message.edit_text(
-            MAIN_MENU_TEXT,
-            reply_markup=main_menu_kb()
-        )
-        # Если альбом больше не нужен — ничего не вызываем.
-        # Если захочешь оставить альбом плюс меню, можно дописать:
-        # await send_start_album(cb.message)
+        # 1) текст + кнопка на видео
+        await cb.message.answer(WELCOME_VIDEO_TEXT, reply_markup=welcome_video_kb(), parse_mode="HTML")
+
+        # 2) отдельным сообщением главное меню
+        await cb.message.answer(MAIN_MENU_TEXT, reply_markup=main_menu_kb())
+
+        # (по желанию) можно обновить текущее сообщение, чтобы убрать кнопку проверки:
+        try:
+            await cb.message.edit_text("✅ Подписка подтверждена 🤍")
+        except Exception:
+            pass
 
     else:
         await cb.answer("😔 Ты ещё не подписана. Подпишись и нажми снова!", show_alert=True)
