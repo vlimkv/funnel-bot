@@ -91,10 +91,9 @@ async def cmd_start(msg: Message, state: FSMContext):
     # Проверка подписки
     if await is_subscribed(msg.bot, uid):
         await msg.answer(WELCOME_VIDEO_TEXT, reply_markup=welcome_video_kb(), parse_mode="HTML")
-
-        await msg.answer(MAIN_MENU_TEXT, reply_markup=main_menu_kb())
     else:
         await msg.answer(SUBSCRIPTION_REQUIRED, reply_markup=subscription_kb())
+
 
 @router.callback_query(F.data == "check_subscription")
 async def check_subscription(cb: CallbackQuery):
@@ -103,18 +102,12 @@ async def check_subscription(cb: CallbackQuery):
     if await is_subscribed(cb.bot, uid):
         await cb.answer("✅ Отлично! Теперь ты с нами 🤍", show_alert=False)
 
-        # 1) текст + кнопка на видео
         await cb.message.answer(WELCOME_VIDEO_TEXT, reply_markup=welcome_video_kb(), parse_mode="HTML")
 
-        # 2) отдельным сообщением главное меню
-        await cb.message.answer(MAIN_MENU_TEXT, reply_markup=main_menu_kb())
-
-        # (по желанию) можно обновить текущее сообщение, чтобы убрать кнопку проверки:
         try:
             await cb.message.edit_text("✅ Подписка подтверждена 🤍")
         except Exception:
             pass
-
     else:
         await cb.answer("😔 Ты ещё не подписана. Подпишись и нажми снова!", show_alert=True)
         await cb.message.edit_text(SUBSCRIPTION_NOT_FOUND, reply_markup=subscription_kb())
