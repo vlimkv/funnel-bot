@@ -213,3 +213,24 @@ async def get_all_users_with_contacts():
             order by created_at desc
         """)
         return [dict(r) for r in rows]
+
+async def get_all_users_full():
+    """Полная выгрузка всех пользователей (для CSV экспорта админом)"""
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch("""
+            select 
+                user_id,
+                username,
+                first_name,
+                last_name,
+                email,
+                phone,
+                ref_tag,
+                do_not_disturb,
+                streak_count,
+                created_at,
+                updated_at
+            from tg_users
+            order by created_at desc
+        """)
+        return [dict(r) for r in rows]

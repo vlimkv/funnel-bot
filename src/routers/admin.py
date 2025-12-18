@@ -58,6 +58,7 @@ def admin_main_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="📈 Воронка", callback_data="admin_funnel")],
         [InlineKeyboardButton(text="🔗 Управление ссылками", callback_data="admin_links")],
         [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="📥 Скачать пользователей (CSV)", callback_data="admin_download_users_csv")],  # ✅
         [InlineKeyboardButton(text="📧 Контакты (CSV)", callback_data="admin_contacts")],
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
     ])
@@ -992,3 +993,74 @@ async def admin_broadcast_stool_tips(cb: CallbackQuery):
         f"✅ Памятка отправлена\nОтправлено: {sent}\nОшибок: {err}",
         reply_markup=admin_main_kb()
     )
+
+@router.callback_query(F.data == "admin_download_users_csv")
+async def admin_download_users_csv(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа", show_alert=True); return
+
+    await cb.answer("📥 Генерирую CSV...", show_alert=False)
+
+    users = await db.get_all_users_full()
+    if not users:
+        await cb.message.answer("👥 Пользователей пока нет")
+        return
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        delete=False,
+        suffix=".csv",
+        encoding="utf-8-sig",
+        newline=""
+    ) as tmp:
+        writer = csv.writer(tmp, delimiter=";")
+        writer.writerow([
+            "№",
+            "user_id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "phone",
+            "ref_tag",
+            "do_not_disturb",
+            "streak_count",
+            "created_at",
+            "updated_at",
+        ])
+
+        for i, u in enumerate(users, 1):
+            created = u.get("created_at")
+            updated = u.get("updated_at")
+
+            writer.writerow([
+                i,
+                u.get("user_id") or "",
+                u.get("username") or "",
+                u.get("first_name") or "",
+                u.get("last_name") or "",
+                u.get("email") or "",
+                u.get("phone") or "",
+                u.get("ref_tag") or "",
+                "1" if u.get("do_not_disturb") else "0",
+                u.get("streak_count") or 0,
+                created.strftime("%d.%m.%Y %H:%M") if created else "",
+                updated.strftime("%d.%m.%Y %H:%M") if updated else "",
+            ])
+
+        tmp_path = tmp.name
+
+    try:
+        doc = FSInputFile(tmp_path, filename=f"users_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
+        await cb.message.answer_document(
+            doc,
+            caption=(
+                f"👥 <b>Экспорт пользователей</b>\n\n"
+                f"Всего записей: {len(users)}\n"
+                f"Дата выгрузки: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            ),
+            parse_mode="HTML"
+        )
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
