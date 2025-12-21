@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from ..config import Config
 from .. import db
-from ..keyboards import main_kb, siren_youtube_kb, siren_presale_kb, main_menu_kb, welcome_video_kb
+from ..keyboards import main_kb, siren_youtube_kb, siren_presale_kb, main_menu_kb, restore_sales_kb
 from ..texts import (
     SUBSCRIPTION_REQUIRED,
     SUBSCRIPTION_SUCCESS,
@@ -76,10 +76,7 @@ async def send_restore_sales_album(msg: Message):
             continue
 
         f = FSInputFile(path)
-        if i == 0:
-            media.append(InputMediaPhoto(media=f, caption=RESTORE_SALES_TEXT, parse_mode="HTML"))
-        else:
-            media.append(InputMediaPhoto(media=f))
+        media.append(InputMediaPhoto(media=f))
 
     if missing:
         logging.warning("Missing RE:STORE album files: %s", missing)
@@ -115,7 +112,7 @@ async def cmd_start(msg: Message, state: FSMContext):
     # Проверка подписки
     if await is_subscribed(msg.bot, uid):
         await send_restore_sales_album(msg)
-        await msg.answer("🏠 Главное меню", reply_markup=siren_presale_kb())
+        await msg.answer(RESTORE_SALES_TEXT, reply_markup=restore_sales_kb(), parse_mode="HTML")
     else:
         await msg.answer(SUBSCRIPTION_REQUIRED, reply_markup=subscription_kb())
 
@@ -128,11 +125,10 @@ async def check_subscription(cb: CallbackQuery):
         await cb.answer("✅ Отлично! Теперь ты с нами 🤍", show_alert=False)
 
         await send_restore_sales_album(cb.message)
-
-        await cb.message.answer("🏠 Главное меню", reply_markup=siren_presale_kb())
+        await cb.message.answer(RESTORE_SALES_TEXT, reply_markup=restore_sales_kb(), parse_mode="HTML")
 
         try:
-            await cb.message.edit_text("✅ Подписка подтверждена 🤍", reply_markup=subscription_kb())
+            await cb.message.edit_text("✅ Подписка подтверждена 🤍")
         except Exception:
             pass
     else:

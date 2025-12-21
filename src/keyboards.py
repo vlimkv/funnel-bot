@@ -184,3 +184,9 @@ def welcome_video_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="▶️ Смотреть видео", url=WELCOME_VIDEO_URL)],
         [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu_main")],
     ])
+
+def restore_sales_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✨ Попасть на программу", url="https://sezaamankeldi.com")],
+        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu_main")],
+    ])
