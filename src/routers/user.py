@@ -309,23 +309,3 @@ async def open_program_pelvic(cb: CallbackQuery):
         reply_markup=program_pelvic_floor_kb()
     )
     await cb.answer()
-
-
-@router.callback_query(F.data == "program_for_whom")
-async def program_for_whom(cb: CallbackQuery):
-    await cb.message.edit_text(
-        PROGRAM_FOR_WHOM_TEXT,
-        reply_markup=program_pelvic_floor_kb()
-    )
-    await cb.answer()
-
-
-
-@router.callback_query(F.data == "program_what_you_get")
-async def program_what_you_get(cb: CallbackQuery):
-    doc = FSInputFile("files/pelvic_floor_program.pdf")
-    await cb.message.answer_document(
-        document=doc,
-        caption="Подробная программа курса «Тазовое Дно»"
-    )
-    await cb.answer()

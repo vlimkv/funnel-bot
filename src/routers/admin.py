@@ -15,6 +15,7 @@ import asyncio
 # тексты и клавиатуры для сценариев
 from ..texts import SIREN_WELCOME, SIREN_PRESALE
 from ..texts import WELCOME_PF_HTML, ALBUM_ASSETS
+from ..texts import RESTORE_SALES_TEXT, RESTORE_SALES_ASSETS
 from ..keyboards import siren_youtube_kb, siren_presale_kb
 
 PELVIC_RESULTS_ASSETS = [
@@ -105,6 +106,7 @@ def admin_broadcast_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🪷 ПД: трёхшаговая рассылка", callback_data="admin_broadcast_pelvic_flow")],
         [InlineKeyboardButton(text="▶️ Утренняя зарядка (YouTube)", callback_data="admin_broadcast_morning_warmup")],
         [InlineKeyboardButton(text="🍑 Стул и тяжесть (памятка)", callback_data="admin_broadcast_stool_tips")],  # ← НОВОЕ
+        [InlineKeyboardButton(text="🌙 RE:STORE: продажи открыты (6 фото)", callback_data="admin_broadcast_restore_sales")],
         [InlineKeyboardButton(text="📝 Только предзапись", callback_data="admin_broadcast_presale")],
         [InlineKeyboardButton(text="📸 Стартовый альбом (assets)", callback_data="admin_broadcast_start_album")],
         [InlineKeyboardButton(text="✍️ Своя рассылка", callback_data="admin_broadcast_custom")],
@@ -879,6 +881,62 @@ async def admin_broadcast_menstruation(cb: CallbackQuery):
 
     await cb.message.answer(
         f"✅ Рассылка про боль во время менструации завершена\n"
+        f"Отправлено: {sent}\n"
+        f"Ошибок: {err}",
+        reply_markup=admin_main_kb()
+    )
+
+@router.callback_query(F.data == "admin_broadcast_restore_sales")
+async def admin_broadcast_restore_sales(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа", show_alert=True)
+        return
+
+    users = await db.get_all_users()
+    total = len(users)
+
+    await cb.message.answer(
+        f"🌙 Запускаю рассылку RE:STORE (6 фото)…\nВсего пользователей: {total}"
+    )
+    await cb.answer()
+
+    def build_restore_sales_media(caption: str):
+        media = []
+        for i, path in enumerate(RESTORE_SALES_ASSETS):
+            if os.path.exists(path):
+                f = FSInputFile(path)
+                if i == 0:
+                    media.append(InputMediaPhoto(media=f, caption=caption, parse_mode="HTML"))
+                else:
+                    media.append(InputMediaPhoto(media=f))
+        return media
+
+    sent = 0
+    err = 0
+
+    for u in users:
+        try:
+            media = build_restore_sales_media(RESTORE_SALES_TEXT)
+            if media:
+                await cb.message.bot.send_media_group(
+                    chat_id=u["user_id"],
+                    media=media
+                )
+            else:
+                # если фоток нет — хотя бы текст
+                await cb.message.bot.send_message(
+                    chat_id=u["user_id"],
+                    text=RESTORE_SALES_TEXT,
+                    parse_mode="HTML",
+                )
+
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception:
+            err += 1
+
+    await cb.message.answer(
+        f"✅ RE:STORE рассылка завершена\n"
         f"Отправлено: {sent}\n"
         f"Ошибок: {err}",
         reply_markup=admin_main_kb()

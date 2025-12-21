@@ -14,7 +14,7 @@ from ..texts import (
     SIREN_WELCOME,
     SIREN_PRESALE, WELCOME_PF_HTML, ALBUM_ASSETS,
     MAIN_MENU_TEXT,
-    WELCOME_VIDEO_TEXT,
+    RESTORE_SALES_TEXT, RESTORE_SALES_ASSETS,
 )
 import asyncio
 import os
@@ -66,6 +66,30 @@ async def send_start_album(msg: Message):
         logging.exception("Failed to send start album: %s", e)
         await msg.answer("⚠️ Не удалось отправить альбом, попробуйте позже.")
 
+async def send_restore_sales_album(msg: Message):
+    media = []
+    missing = []
+
+    for i, path in enumerate(RESTORE_SALES_ASSETS):
+        if not os.path.exists(path):
+            missing.append(path)
+            continue
+
+        f = FSInputFile(path)
+        if i == 0:
+            media.append(InputMediaPhoto(media=f, caption=RESTORE_SALES_TEXT, parse_mode="HTML"))
+        else:
+            media.append(InputMediaPhoto(media=f))
+
+    if missing:
+        logging.warning("Missing RE:STORE album files: %s", missing)
+
+    if not media:
+        await msg.answer("⚠️ Материал временно недоступен. Попробуйте позже.")
+        return
+
+    await msg.bot.send_media_group(chat_id=msg.chat.id, media=media)
+
 @router.message(CommandStart())
 async def cmd_start(msg: Message, state: FSMContext):
     """Команда /start с проверкой подписки"""
@@ -90,7 +114,8 @@ async def cmd_start(msg: Message, state: FSMContext):
 
     # Проверка подписки
     if await is_subscribed(msg.bot, uid):
-        await msg.answer(WELCOME_VIDEO_TEXT, reply_markup=welcome_video_kb(), parse_mode="HTML")
+        await send_restore_sales_album(msg)
+        await msg.answer("🏠 Главное меню", reply_markup=siren_presale_kb())
     else:
         await msg.answer(SUBSCRIPTION_REQUIRED, reply_markup=subscription_kb())
 
@@ -102,10 +127,12 @@ async def check_subscription(cb: CallbackQuery):
     if await is_subscribed(cb.bot, uid):
         await cb.answer("✅ Отлично! Теперь ты с нами 🤍", show_alert=False)
 
-        await cb.message.answer(WELCOME_VIDEO_TEXT, reply_markup=welcome_video_kb(), parse_mode="HTML")
+        await send_restore_sales_album(cb.message)
+
+        await cb.message.answer("🏠 Главное меню", reply_markup=siren_presale_kb())
 
         try:
-            await cb.message.edit_text("✅ Подписка подтверждена 🤍")
+            await cb.message.edit_text("✅ Подписка подтверждена 🤍", reply_markup=subscription_kb())
         except Exception:
             pass
     else:

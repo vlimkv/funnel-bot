@@ -64,7 +64,7 @@ def main_menu_kb() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="🔸 О программе «Тазовое Дно»",
+                text="🔸 О программе «RE:STORE»",
                 callback_data="menu_program_pelvic"
             )
         ],
@@ -153,20 +153,20 @@ def program_pelvic_floor_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
-                text="Для кого программа",
-                callback_data="program_for_whom"
+                text="1️⃣ Ознакомиться с программой",
+                url="https://sezaamankeldi.com"
             )
         ],
         [
             InlineKeyboardButton(
-                text="Что вы получите на курсе (PDF)",
-                callback_data="program_what_you_get"
+                text="2️⃣ Попасть на программу",
+                url="https://sezaamankeldi.com/#tarif"
             )
         ],
         [
             InlineKeyboardButton(
-                text="Попасть в предзапись",
-                url="https://docs.google.com/forms/d/e/1FAIpQLScwT0C1KpgRvm9Na05whnoBpJ3f_JOBs_gDS6zBBt2fhSBZXw/viewform"
+                text="3️⃣ Написать в отдел заботы",
+                url="https://wa.me/77776776455"
             )
         ],
         [
