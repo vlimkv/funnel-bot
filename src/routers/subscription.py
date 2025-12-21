@@ -19,6 +19,7 @@ from ..texts import (
 import asyncio
 import os
 import logging
+from aiogram.exceptions import TelegramRetryAfter
 
 router = Router()
 
@@ -76,7 +77,10 @@ async def send_restore_sales_album(msg: Message):
             continue
 
         f = FSInputFile(path)
-        media.append(InputMediaPhoto(media=f))
+        if i == 0:
+            media.append(InputMediaPhoto(media=f, caption=RESTORE_SALES_TEXT, parse_mode="HTML"))
+        else:
+            media.append(InputMediaPhoto(media=f))
 
     if missing:
         logging.warning("Missing RE:STORE album files: %s", missing)
@@ -85,7 +89,16 @@ async def send_restore_sales_album(msg: Message):
         await msg.answer("⚠️ Материал временно недоступен. Попробуйте позже.")
         return
 
-    await msg.bot.send_media_group(chat_id=msg.chat.id, media=media)
+    try:
+        await msg.bot.send_media_group(chat_id=msg.chat.id, media=media)
+    except TelegramRetryAfter as e:
+        logging.warning("RetryAfter %s sec on send_media_group", e.retry_after)
+        await asyncio.sleep(e.retry_after + 1)
+        await msg.bot.send_media_group(chat_id=msg.chat.id, media=media)
+    except Exception as e:
+        logging.exception("send_restore_sales_album failed: %r", e)
+        # fallback: хотя бы текст + кнопки
+        await msg.answer(RESTORE_SALES_TEXT, reply_markup=restore_sales_kb(), parse_mode="HTML")
 
 @router.message(CommandStart())
 async def cmd_start(msg: Message, state: FSMContext):
@@ -112,9 +125,10 @@ async def cmd_start(msg: Message, state: FSMContext):
     # Проверка подписки
     if await is_subscribed(msg.bot, uid):
         await send_restore_sales_album(msg)
-        await msg.answer(RESTORE_SALES_TEXT, reply_markup=restore_sales_kb(), parse_mode="HTML")
+        await msg.answer("Выберите действие 👇", reply_markup=restore_sales_kb())
     else:
         await msg.answer(SUBSCRIPTION_REQUIRED, reply_markup=subscription_kb())
+
 
 
 @router.callback_query(F.data == "check_subscription")
@@ -125,7 +139,7 @@ async def check_subscription(cb: CallbackQuery):
         await cb.answer("✅ Отлично! Теперь ты с нами 🤍", show_alert=False)
 
         await send_restore_sales_album(cb.message)
-        await cb.message.answer(RESTORE_SALES_TEXT, reply_markup=restore_sales_kb(), parse_mode="HTML")
+        await cb.message.answer("Выберите действие 👇", reply_markup=restore_sales_kb())
 
         try:
             await cb.message.edit_text("✅ Подписка подтверждена 🤍")
