@@ -4,6 +4,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter, TelegramBadRequest
 from ..config import Config
 from .. import db
 from datetime import datetime
@@ -900,13 +901,13 @@ async def admin_broadcast_restore_sales(cb: CallbackQuery):
     )
     await cb.answer()
 
-    def build_restore_sales_media(caption: str):
+    def build_restore_sales_media():
         media = []
         for i, path in enumerate(RESTORE_SALES_ASSETS):
             if os.path.exists(path):
                 f = FSInputFile(path)
                 if i == 0:
-                    media.append(InputMediaPhoto(media=f, caption=caption, parse_mode="HTML"))
+                    media.append(InputMediaPhoto(media=f, caption=RESTORE_SALES_TEXT, parse_mode="HTML"))
                 else:
                     media.append(InputMediaPhoto(media=f))
         return media
@@ -914,26 +915,42 @@ async def admin_broadcast_restore_sales(cb: CallbackQuery):
     sent = 0
     err = 0
 
-    for u in users:
+    for idx, u in enumerate(users, 1):
+        chat_id = int(u["user_id"])  # 🔥 важно
+
         try:
-            media = build_restore_sales_media(RESTORE_SALES_TEXT)
+            media = build_restore_sales_media()
+
             if media:
-                await cb.message.bot.send_media_group(
-                    chat_id=u["user_id"],
-                    media=media
-                )
+                await cb.message.bot.send_media_group(chat_id=chat_id, media=media)
             else:
-                # если фоток нет — хотя бы текст
-                await cb.message.bot.send_message(
-                    chat_id=u["user_id"],
-                    text=RESTORE_SALES_TEXT,
-                    parse_mode="HTML",
-                )
+                await cb.message.bot.send_message(chat_id=chat_id, text=RESTORE_SALES_TEXT, parse_mode="HTML")
 
             sent += 1
-            await asyncio.sleep(0.05)
-        except Exception:
+            await asyncio.sleep(0.08)
+
+        except TelegramRetryAfter as e:
+            # если телега просит подождать — ждём
+            await asyncio.sleep(e.retry_after + 1)
             err += 1
+            print(f"⏳ RetryAfter for {chat_id}: {e.retry_after}s")
+
+        except TelegramForbiddenError as e:
+            # пользователь заблокировал бота — это нормально
+            err += 1
+            print(f"🚫 Blocked by user {chat_id}: {repr(e)}")
+
+        except TelegramBadRequest as e:
+            err += 1
+            print(f"⚠️ BadRequest for {chat_id}: {repr(e)}")
+
+        except Exception as e:
+            err += 1
+            print(f"❌ Unknown error for {chat_id}: {repr(e)}")
+
+        # прогресс каждые 25
+        if idx % 25 == 0:
+            await cb.message.answer(f"⏳ Прогресс: {idx}/{total} | ✅ {sent} | ❌ {err}")
 
     await cb.message.answer(
         f"✅ RE:STORE рассылка завершена\n"
