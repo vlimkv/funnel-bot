@@ -108,6 +108,7 @@ def admin_broadcast_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="▶️ Утренняя зарядка (YouTube)", callback_data="admin_broadcast_morning_warmup")],
         [InlineKeyboardButton(text="🪷 Мягкая растяжка (YouTube)", callback_data="admin_broadcast_soft_stretch")],
         [InlineKeyboardButton(text="🌙 RE:STORE: продажи открыты (6 фото)", callback_data="admin_broadcast_restore_sales")],
+        [InlineKeyboardButton(text="🌙 RE:STORE: текст + кнопка", callback_data="admin_broadcast_restore_text_btn")],
         [InlineKeyboardButton(text="📝 Только предзапись", callback_data="admin_broadcast_presale")],
         [InlineKeyboardButton(text="📸 Стартовый альбом (assets)", callback_data="admin_broadcast_start_album")],
         [InlineKeyboardButton(text="✍️ Своя рассылка", callback_data="admin_broadcast_custom")],
@@ -1113,6 +1114,69 @@ async def admin_broadcast_stool_tips(cb: CallbackQuery):
 
     await cb.message.answer(
         f"✅ Памятка отправлена\nОтправлено: {sent}\nОшибок: {err}",
+        reply_markup=admin_main_kb()
+    )
+
+@router.callback_query(F.data == "admin_broadcast_restore_text_btn")
+async def admin_broadcast_restore_text_btn(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа", show_alert=True)
+        return
+
+    text = (
+        "<b>Ты откладываешь.</b> Пробуешь разные упражнения и диеты, что-то помогает, но ненадолго.\n"
+        "потом снова пауза. и снова «когда-нибудь».\n\n"
+        "<b>в 2026 году всё может быть иначе. не через жёсткие цели и усилия, а через восстановление и понимание своего тела.</b>\n\n"
+        "<b>RE:STORE - про это.</b> когда ты начинаешь понимать, "
+        "<u>почему появляются боли и напряжение, почему живот не держит форму, почему сбивается дыхание и слабеет тазовое дно</u> "
+        "- уходит тревога. появляется ясность. и тело начинает отвечать.\n\n"
+        "<b>RE:STORE - это план восстановления.</b> 5 недель, за которые ты шаг за шагом:\n"
+        "— наладишь работу тазового дна, живота, дыхания и осанки\n"
+        "— мягко восстановишь тело без перегруза\n"
+        "— выстроишь рутину, которую можно сохранить в жизни\n\n"
+        "⬇️ старт 5 января! начни новый год с телом без постоянного напряжения и боли 🤍"
+    )
+
+    url = "https://www.sezaamankeldi.com"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="хочу с вами", url=url)
+    ]])
+
+    users = await db.get_all_users()
+    total = len(users)
+
+    await cb.message.answer(f"🌙 Запускаю RE:STORE (текст + кнопка)…\nВсего пользователей: {total}")
+    await cb.answer()
+
+    sent = 0
+    err = 0
+
+    for idx, u in enumerate(users, 1):
+        try:
+            await cb.message.bot.send_message(
+                chat_id=int(u["user_id"]),
+                text=text,
+                reply_markup=kb,
+                parse_mode="HTML"
+            )
+            sent += 1
+            await asyncio.sleep(0.03)
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+            err += 1
+        except TelegramForbiddenError:
+            err += 1
+        except TelegramBadRequest:
+            err += 1
+        except Exception:
+            err += 1
+
+        if idx % 25 == 0:
+            await cb.message.answer(f"⏳ Прогресс: {idx}/{total} | ✅ {sent} | ❌ {err}")
+
+    await cb.message.answer(
+        f"✅ Готово!\nОтправлено: {sent}\nОшибок: {err}",
         reply_markup=admin_main_kb()
     )
 
