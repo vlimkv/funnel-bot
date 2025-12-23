@@ -106,7 +106,7 @@ def admin_broadcast_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🩸 МФД: боль во время менструации", callback_data="admin_broadcast_menstruation")],
         [InlineKeyboardButton(text="🪷 ПД: трёхшаговая рассылка", callback_data="admin_broadcast_pelvic_flow")],
         [InlineKeyboardButton(text="▶️ Утренняя зарядка (YouTube)", callback_data="admin_broadcast_morning_warmup")],
-        [InlineKeyboardButton(text="🍑 Стул и тяжесть (памятка)", callback_data="admin_broadcast_stool_tips")],  # ← НОВОЕ
+        [InlineKeyboardButton(text="🪷 Мягкая растяжка (YouTube)", callback_data="admin_broadcast_soft_stretch")],
         [InlineKeyboardButton(text="🌙 RE:STORE: продажи открыты (6 фото)", callback_data="admin_broadcast_restore_sales")],
         [InlineKeyboardButton(text="📝 Только предзапись", callback_data="admin_broadcast_presale")],
         [InlineKeyboardButton(text="📸 Стартовый альбом (assets)", callback_data="admin_broadcast_start_album")],
@@ -999,6 +999,53 @@ async def admin_broadcast_morning_warmup(cb: CallbackQuery):
 
     await cb.message.answer(
         f"✅ Рассылка завершена\nОтправлено: {sent}\nОшибок: {err}",
+        reply_markup=admin_main_kb()
+    )
+
+@router.callback_query(F.data == "admin_broadcast_soft_stretch")
+async def admin_broadcast_soft_stretch(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа", show_alert=True)
+        return
+
+    text = (
+        "<b>Дорогая, привет 🤍</b>\n\n"
+        "Отправляю тебе 10-минутный <u>комплекс мягкой растяжки на расслабление</u>.\n\n"
+        "Идеально подойдёт после рабочего дня, чтобы снять напряжение, вернуть телу ощущение спокойствия.\n\n"
+        "<b>🪷 Попробуй сделать прямо сейчас, не откладывая на потом. "
+        "После рабочего дня это особенно приятно</b>\n\n"
+    )
+
+    youtube_url = "https://youtu.be/tx2qu9jH2R4?si=d9pFJou8Ovrjr6g5"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="забрать комплекс", url=youtube_url)
+    ]])
+
+    users = await db.get_all_users()
+    total = len(users)
+
+    await cb.message.answer(f"🪷 Запускаю рассылку «Мягкая растяжка»…\nВсего пользователей: {total}")
+    await cb.answer()
+
+    sent = 0
+    err = 0
+
+    for u in users:
+        try:
+            await cb.message.bot.send_message(
+                chat_id=u["user_id"],
+                text=text,
+                reply_markup=kb,
+                parse_mode="HTML",
+            )
+            sent += 1
+            await asyncio.sleep(0.03)
+        except Exception:
+            err += 1
+
+    await cb.message.answer(
+        f"✅ Рассылка «Мягкая растяжка» завершена\nОтправлено: {sent}\nОшибок: {err}",
         reply_markup=admin_main_kb()
     )
 
