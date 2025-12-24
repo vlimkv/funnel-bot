@@ -120,6 +120,7 @@ def admin_broadcast_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🪷 Мягкая растяжка (YouTube)", callback_data="admin_broadcast_soft_stretch")],
         [InlineKeyboardButton(text="🌙 RE:STORE: продажи открыты (6 фото)", callback_data="admin_broadcast_restore_sales")],
         [InlineKeyboardButton(text="🌙 RE:STORE: текст + кнопка", callback_data="admin_broadcast_restore_text_btn")],
+        [InlineKeyboardButton(text="🌙 RE:STORE: 7 фото → текст + кнопка", callback_data="admin_broadcast_restore_7_then_text_btn")],
         [InlineKeyboardButton(text="📝 Только предзапись", callback_data="admin_broadcast_presale")],
         [InlineKeyboardButton(text="📸 Стартовый альбом (assets)", callback_data="admin_broadcast_start_album")],
         [InlineKeyboardButton(text="✍️ Своя рассылка", callback_data="admin_broadcast_custom")],
