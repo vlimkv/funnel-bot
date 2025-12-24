@@ -17,6 +17,7 @@ import asyncio
 from ..texts import SIREN_WELCOME, SIREN_PRESALE
 from ..texts import WELCOME_PF_HTML, ALBUM_ASSETS
 from ..texts import RESTORE_SALES_TEXT, RESTORE_SALES_ASSETS
+from ..texts import RESTORE_7PH_TEXT_HTML
 from ..keyboards import siren_youtube_kb, siren_presale_kb
 
 PELVIC_RESULTS_ASSETS = [
@@ -36,6 +37,16 @@ MENSTRUATION_ASSETS = [
     "files/menstruation_5.jpg",
     "files/menstruation_6.jpg",
     "files/menstruation_7.jpg",
+]
+
+RESTORE_7PH_ASSETS = [
+    "files/restore_1.jpg",
+    "files/restore_2.jpg",
+    "files/restore_3.jpg",
+    "files/restore_4.jpg",
+    "files/restore_5.jpg",
+    "files/restore_6.jpg",
+    "files/restore_7.jpg",
 ]
 
 router = Router()
@@ -1250,3 +1261,81 @@ async def admin_download_users_csv(cb: CallbackQuery):
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
+@router.callback_query(F.data == "admin_broadcast_restore_7_then_text_btn")
+async def admin_broadcast_restore_7_then_text_btn(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа", show_alert=True)
+        return
+
+    users = await db.get_all_users()
+    total = len(users)
+
+    await cb.message.answer(
+        f"🌙 Запускаю RE:STORE: 7 фото → текст + кнопка…\nВсего пользователей: {total}"
+    )
+    await cb.answer()
+
+    url = "https://www.sezaamankeldi.com"
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="присоединиться к RE:STORE", url=url)
+    ]])
+
+    def build_album_7():
+        media = []
+        for path in RESTORE_7PH_ASSETS:
+            if os.path.exists(path):
+                media.append(InputMediaPhoto(media=FSInputFile(path)))
+        return media
+
+    sent = 0
+    err = 0
+
+    for idx, u in enumerate(users, 1):
+        chat_id = int(u["user_id"])
+        try:
+            media = build_album_7()
+
+            # 1) сперва альбом из 7 фото (без подписи)
+            if media:
+                await cb.message.bot.send_media_group(chat_id=chat_id, media=media)
+            else:
+                # если вдруг нет файлов — просто пропустим шаг с фото
+                pass
+
+            # 2) затем отдельным сообщением — текст (HTML) + кнопка
+            await cb.message.bot.send_message(
+                chat_id=chat_id,
+                text=RESTORE_7PH_TEXT_HTML,
+                reply_markup=kb,
+                parse_mode="HTML",
+                disable_web_page_preview=False,  # если хочешь превью сайта
+            )
+
+            sent += 1
+            await asyncio.sleep(0.08)
+
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+            err += 1
+            print(f"⏳ RetryAfter for {chat_id}: {e.retry_after}s")
+
+        except TelegramForbiddenError as e:
+            err += 1
+            print(f"🚫 Blocked by user {chat_id}: {repr(e)}")
+
+        except TelegramBadRequest as e:
+            err += 1
+            print(f"⚠️ BadRequest for {chat_id}: {repr(e)}")
+
+        except Exception as e:
+            err += 1
+            print(f"❌ Unknown error for {chat_id}: {repr(e)}")
+
+        if idx % 25 == 0:
+            await cb.message.answer(f"⏳ Прогресс: {idx}/{total} | ✅ {sent} | ❌ {err}")
+
+    await cb.message.answer(
+        f"✅ Готово!\nОтправлено: {sent}\nОшибок: {err}",
+        reply_markup=admin_main_kb()
+    )
