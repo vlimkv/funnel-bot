@@ -49,6 +49,27 @@ RESTORE_7PH_ASSETS = [
     "files/restore_7.jpg",
 ]
 
+RESTORE_FAQ_5_ASSETS = [
+    "files/restore_faq_1.jpg",
+    "files/restore_faq_2.jpg",
+    "files/restore_faq_3.jpg",
+    "files/restore_faq_4.jpg",
+    "files/restore_faq_5.jpg",
+]
+
+RESTORE_FAQ_TEXT_HTML = (
+    "<b>я часто замечаю, что вы наблюдаете со стороны.<br>"
+    "читаете, сохраняете, возвращаетесь - но так и не решаетесь зайти.<br><br></b>"
+    "возможно, вы узнаёте себя и понимаете, что пока вас останавливают сомнения.<br><br>"
+    "<u>до старта программы осталось совсем немного времени</u>. И я уже чувствую, с каким ожиданием в неё заходят девушки, которые сделали этот шаг.<br><br>"
+    "чаще всего решение откладывается не из-за отсутствия желания,а из-за тревоги: подойдёт ли формат, получится ли дойти до конца, будет ли результат.<br><br>"
+    "в этих карточках я ответила на самые частые вопросы,<br>"
+    "которые обычно остаются внутри и мешают выбрать себя спокойно 🪷<br><br>"
+    "<b>если сомнения всё ещё есть, напишите мне, я отвечу лично 🤍</b>"
+)
+
+RESTORE_FAQ_BUTTON_URL = "https://www.sezaamankeldi.com"
+
 router = Router()
 
 # ID администраторов
@@ -121,6 +142,7 @@ def admin_broadcast_kb() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🌙 RE:STORE: продажи открыты (6 фото)", callback_data="admin_broadcast_restore_sales")],
         [InlineKeyboardButton(text="🌙 RE:STORE: текст + кнопка", callback_data="admin_broadcast_restore_text_btn")],
         [InlineKeyboardButton(text="🌙 RE:STORE: 7 фото → текст + кнопка", callback_data="admin_broadcast_restore_7_then_text_btn")],
+        [InlineKeyboardButton(text="🌙 RE:STORE: FAQ (5 фото + кнопка)", callback_data="admin_broadcast_restore_faq_5")],
         [InlineKeyboardButton(text="📝 Только предзапись", callback_data="admin_broadcast_presale")],
         [InlineKeyboardButton(text="📸 Стартовый альбом (assets)", callback_data="admin_broadcast_start_album")],
         [InlineKeyboardButton(text="✍️ Своя рассылка", callback_data="admin_broadcast_custom")],
@@ -1311,6 +1333,78 @@ async def admin_broadcast_restore_7_then_text_btn(cb: CallbackQuery):
                 reply_markup=kb,
                 parse_mode="HTML",
                 disable_web_page_preview=False,  # если хочешь превью сайта
+            )
+
+            sent += 1
+            await asyncio.sleep(0.08)
+
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+            err += 1
+            print(f"⏳ RetryAfter for {chat_id}: {e.retry_after}s")
+
+        except TelegramForbiddenError as e:
+            err += 1
+            print(f"🚫 Blocked by user {chat_id}: {repr(e)}")
+
+        except TelegramBadRequest as e:
+            err += 1
+            print(f"⚠️ BadRequest for {chat_id}: {repr(e)}")
+
+        except Exception as e:
+            err += 1
+            print(f"❌ Unknown error for {chat_id}: {repr(e)}")
+
+        if idx % 25 == 0:
+            await cb.message.answer(f"⏳ Прогресс: {idx}/{total} | ✅ {sent} | ❌ {err}")
+
+    await cb.message.answer(
+        f"✅ Готово!\nОтправлено: {sent}\nОшибок: {err}",
+        reply_markup=admin_main_kb()
+    )
+
+@router.callback_query(F.data == "admin_broadcast_restore_faq_5")
+async def admin_broadcast_restore_faq_5(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа", show_alert=True)
+        return
+
+    users = await db.get_all_users()
+    total = len(users)
+
+    await cb.message.answer(
+        f"🌙 Запускаю рассылку: FAQ (5 фото) + текст + кнопка…\nВсего пользователей: {total}"
+    )
+    await cb.answer()
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Закрепить участие", url=RESTORE_FAQ_BUTTON_URL)
+    ]])
+
+    def build_album_5():
+        media = []
+        for path in RESTORE_FAQ_5_ASSETS:
+            if os.path.exists(path):
+                media.append(InputMediaPhoto(media=FSInputFile(path)))
+        return media
+
+    sent = 0
+    err = 0
+
+    for idx, u in enumerate(users, 1):
+        chat_id = int(u["user_id"])
+        try:
+            media = build_album_5()
+
+            if media:
+                await cb.message.bot.send_media_group(chat_id=chat_id, media=media)
+
+            await cb.message.bot.send_message(
+                chat_id=chat_id,
+                text=RESTORE_FAQ_TEXT_HTML,
+                reply_markup=kb,
+                parse_mode="HTML",
+                disable_web_page_preview=False,
             )
 
             sent += 1
