@@ -59,3 +59,7 @@ Run with Docker:
 ```bash
 docker-compose up -d --build
 ```
+
+## ⚠️ Disclaimer
+
+**This is the source code for a commercial product. Logic regarding payment gateways and specific content delivery is proprietary.**
