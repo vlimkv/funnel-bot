@@ -78,8 +78,6 @@ RESTORE_FAQ_TEXT_HTML = (
 RESTORE_FAQ_BUTTON_URL = "https://www.sezaamankeldi.com"
 
 router = Router()
-
-# ID администраторов
 ADMIN_IDS = [7042937865]
 
 class AdminStates(StatesGroup):
@@ -89,19 +87,21 @@ class AdminStates(StatesGroup):
     waiting_for_instagram_url = State()
     waiting_for_broadcast_message = State()
     waiting_for_broadcast_album = State()
+    
+    waiting_for_content = State()       
+    waiting_for_btn_name = State()   
+    waiting_for_btn_url = State()    
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
 def admin_main_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📊 Полная статистика", callback_data="admin_stats")],
-        [InlineKeyboardButton(text="📈 Воронка", callback_data="admin_funnel")],
-        [InlineKeyboardButton(text="🔗 Управление ссылками", callback_data="admin_links")],
-        [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")],
-        [InlineKeyboardButton(text="📥 Скачать пользователей (CSV)", callback_data="admin_download_users_csv")],  # ✅
-        [InlineKeyboardButton(text="📧 Контакты (CSV)", callback_data="admin_contacts")],
+        [InlineKeyboardButton(text="⚙️ Настройка ПРИВЕТСТВИЯ (Цепочка)", callback_data="admin_welcome_editor")], 
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="🔗 Управление ссылками", callback_data="admin_links")],
+        [InlineKeyboardButton(text="👥 Пользователи (CSV)", callback_data="admin_download_users_csv")],
     ])
 
 def admin_links_kb() -> InlineKeyboardMarkup:
@@ -1428,3 +1428,367 @@ async def admin_broadcast_restore_faq_5(cb: CallbackQuery):
         f"✅ Готово!\nОтправлено: {sent}\nОшибок: {err}",
         reply_markup=admin_main_kb()
     )
+
+async def get_welcome_editor_kb(settings) -> InlineKeyboardMarkup:
+    buttons = []
+    
+    # Показываем текущие кнопки, чтобы можно было удалить
+    if settings.get('buttons'):
+        for idx, btn in enumerate(settings['buttons']):
+            label = f"❌ Удалить: {btn['text']}"
+            buttons.append([InlineKeyboardButton(text=label, callback_data=f"del_w_btn_{idx}")])
+    
+    buttons.append([InlineKeyboardButton(text="✏️ Изменить текст/фото", callback_data="edit_welcome_text")])
+    buttons.append([InlineKeyboardButton(text="➕ Добавить кнопку-ссылку", callback_data="add_welcome_btn_link")])
+    buttons.append([InlineKeyboardButton(text="👀 Предпросмотр", callback_data="preview_welcome")])
+    buttons.append([InlineKeyboardButton(text="◀️ В главное меню", callback_data="admin_main")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+@router.callback_query(F.data == "admin_welcome_editor")
+async def admin_welcome_editor_menu(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id): return
+    
+    settings = await db.get_welcome_settings()
+    text = (
+        "⚙️ <b>Редактор приветствия</b>\n\n"
+        "Это сообщение видят пользователи сразу после проверки подписки.\n\n"
+        f"📜 <b>Текст сейчас:</b>\n{settings.get('text', 'Не задан')[:200]}...\n\n"
+        f"🔘 <b>Кнопок:</b> {len(settings.get('buttons', []))}\n\n"
+        "Что будем делать?"
+    )
+    await cb.message.edit_text(text, reply_markup=await get_welcome_editor_kb(settings))
+
+@router.callback_query(F.data == "preview_welcome")
+async def preview_welcome(cb: CallbackQuery):
+    """Показать админу, как это выглядит"""
+    settings = await db.get_welcome_settings()
+    
+    # Собираем клавиатуру из настроек
+    kb_rows = []
+    for btn in settings.get('buttons', []):
+        # Если это URL
+        if btn.get('url'):
+            kb_rows.append([InlineKeyboardButton(text=btn['text'], url=btn['url'])])
+        # Если это Callback (для меню)
+        elif btn.get('callback_data'):
+            kb_rows.append([InlineKeyboardButton(text=btn['text'], callback_data=btn['callback_data'])])
+    
+    markup = InlineKeyboardMarkup(inline_keyboard=kb_rows)
+    
+    text = settings.get('text', "Привет!")
+    photo = settings.get('photo_id')
+    
+    await cb.message.answer("⬇️ <b>ПРЕДПРОСМОТР</b> ⬇️")
+    
+    if photo:
+        await cb.message.answer_photo(photo, caption=text, reply_markup=markup)
+    else:
+        await cb.message.answer(text, reply_markup=markup)
+        
+    await cb.message.answer("⬆️ Так это видит пользователь.", reply_markup=await get_welcome_editor_kb(settings))
+    await cb.answer()
+
+# --- Изменение текста и фото ---
+@router.callback_query(F.data == "edit_welcome_text")
+async def start_edit_text(cb: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.edit_welcome_text)
+    await cb.message.edit_text(
+        "✏️ <b>Отправьте новый текст приветствия.</b>\n\n"
+        "📸 Вы также можете отправить <b>Фото с подписью</b> — тогда фото тоже сохранится.\n\n"
+        "Для отмены нажмите /cancel",
+        reply_markup=None
+    )
+
+@router.message(AdminStates.edit_welcome_text)
+async def save_welcome_text(msg: Message, state: FSMContext):
+    if not is_admin(msg.from_user.id): return
+    
+    settings = await db.get_welcome_settings()
+    
+    if msg.photo:
+        settings['text'] = msg.caption or ""
+        settings['photo_id'] = msg.photo[-1].file_id
+    else:
+        settings['text'] = msg.text or ""
+        settings['photo_id'] = None # Если прислали просто текст, удаляем старое фото
+        
+    await db.save_welcome_settings(settings)
+    
+    await msg.answer("✅ Текст/Фото обновлены!", reply_markup=await get_welcome_editor_kb(settings))
+    await state.clear()
+
+# --- Добавление кнопки (Ссылка) ---
+@router.callback_query(F.data == "add_welcome_btn_link")
+async def start_add_btn(cb: CallbackQuery, state: FSMContext):
+    await state.set_state(AdminStates.add_button_text)
+    await cb.message.edit_text("1️⃣ Введите <b>текст на кнопке</b> (название):")
+
+@router.message(AdminStates.add_button_text)
+async def process_btn_name(msg: Message, state: FSMContext):
+    await state.update_data(btn_name=msg.text)
+    await state.set_state(AdminStates.add_button_link)
+    await msg.answer("2️⃣ Теперь отправьте <b>ссылку (URL)</b> для этой кнопки:\n(Например: https://instagram.com/...)")
+
+@router.message(AdminStates.add_button_link)
+async def process_btn_url(msg: Message, state: FSMContext):
+    data = await state.get_data()
+    name = data.get('btn_name')
+    url = msg.text.strip()
+    
+    if not url.startswith('http'):
+        await msg.answer("❌ Ссылка должна начинаться с http:// или https://. Попробуйте еще раз.")
+        return
+
+    settings = await db.get_welcome_settings()
+    if 'buttons' not in settings: settings['buttons'] = []
+    
+    # Добавляем новую кнопку
+    settings['buttons'].append({
+        "text": name,
+        "url": url,
+        "type": "url"
+    })
+    
+    await db.save_welcome_settings(settings)
+    await state.clear()
+    await msg.answer(f"✅ Кнопка «{name}» добавлена!", reply_markup=await get_welcome_editor_kb(settings))
+
+# --- Удаление кнопок ---
+@router.callback_query(F.data.startswith("del_w_btn_"))
+async def delete_welcome_btn(cb: CallbackQuery):
+    try:
+        idx = int(cb.data.split("_")[-1])
+        settings = await db.get_welcome_settings()
+        
+        if 0 <= idx < len(settings['buttons']):
+            deleted = settings['buttons'].pop(idx)
+            await db.save_welcome_settings(settings)
+            await cb.answer(f"🗑 Кнопка «{deleted['text']}» удалена")
+        
+        await cb.message.edit_text(
+            "⚙️ <b>Редактор приветствия</b>", 
+            reply_markup=await get_welcome_editor_kb(settings)
+        )
+    except Exception as e:
+        await cb.answer("Ошибка удаления", show_alert=True)
+
+async def get_chain_editor_kb(chain) -> InlineKeyboardMarkup:
+    buttons = []
+    
+    # Кнопки для каждого сообщения в цепочке
+    for i, msg in enumerate(chain):
+        # Иконка типа контента
+        icon = "📝"
+        if msg['type'] == 'photo': icon = "wm"
+        elif msg['type'] == 'video': icon = "qm"
+        elif msg['type'] == 'video_note': icon = "QU"
+        elif msg['type'] == 'document': icon = "PC"
+        
+        # Предпросмотр текста
+        preview = msg.get('content', '') if msg['type'] == 'text' else msg.get('caption', 'Без текста')
+        if not preview: preview = "Без текста"
+        preview = preview[:15] + "..." 
+        
+        btn_text = f"{i+1}. {icon} {preview}"
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"edit_msg_{i}")])
+
+    # Управление
+    buttons.append([InlineKeyboardButton(text="➕ Добавить сообщение", callback_data="add_msg_menu")])
+    buttons.append([InlineKeyboardButton(text="👀 Тест (отправить мне)", callback_data="test_chain")])
+    buttons.append([InlineKeyboardButton(text="◀️ Выход", callback_data="admin_main")])
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+@router.callback_query(F.data == "admin_welcome_editor")
+async def admin_welcome_editor(cb: CallbackQuery, state: FSMContext):
+    if not is_admin(cb.from_user.id): return
+    await state.clear()
+    
+    chain = await db.get_welcome_chain()
+    text = (
+        "⚙️ <b>Редактор приветственной цепочки</b>\n\n"
+        f"Сейчас в серии: <b>{len(chain)}</b> сообщений.\n"
+        "Они будут приходить пользователю по очереди.\n\n"
+        "Выберите сообщение для редактирования или добавьте новое:"
+    )
+    await cb.message.edit_text(text, reply_markup=await get_chain_editor_kb(chain))
+
+# --- ДОБАВЛЕНИЕ НОВОГО СООБЩЕНИЯ ---
+
+@router.callback_query(F.data == "add_msg_menu")
+async def add_msg_menu(cb: CallbackQuery):
+    text = "Что вы хотите добавить?"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📝 Текст", callback_data="add_new_text")],
+        [InlineKeyboardButton(text="📸 Фото", callback_data="add_new_photo")],
+        [InlineKeyboardButton(text="📹 Видео", callback_data="add_new_video")],
+        [InlineKeyboardButton(text="🔵 Кружочек", callback_data="add_new_vnote")],
+        [InlineKeyboardButton(text="📄 Файл (PDF)", callback_data="add_new_doc")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="admin_welcome_editor")],
+    ])
+    await cb.message.edit_text(text, reply_markup=kb)
+
+@router.callback_query(F.data.startswith("add_new_"))
+async def start_add_content(cb: CallbackQuery, state: FSMContext):
+    msg_type = cb.data.split("_")[-1] # text, photo, video, vnote, doc
+    await state.update_data(new_msg_type=msg_type, editing_index=None) # Index None = новое сообщение
+    await state.set_state(AdminStates.waiting_for_content)
+    
+    prompts = {
+        "text": "Отправьте текст сообщения.",
+        "photo": "Отправьте ФОТО (можно с подписью).",
+        "video": "Отправьте ВИДЕО (можно с подписью).",
+        "vnote": "Отправьте Видео-сообщение (Кружочек).",
+        "doc": "Отправьте Файл/Документ (можно с подписью)."
+    }
+    await cb.message.answer(prompts.get(msg_type, "Отправьте контент."))
+    await cb.answer()
+
+# --- РЕДАКТИРОВАНИЕ СУЩЕСТВУЮЩЕГО ---
+
+@router.callback_query(F.data.startswith("edit_msg_"))
+async def edit_msg_menu(cb: CallbackQuery, state: FSMContext):
+    idx = int(cb.data.split("_")[-1])
+    chain = await db.get_welcome_chain()
+    
+    if idx >= len(chain):
+        await admin_welcome_editor(cb, state)
+        return
+
+    msg = chain[idx]
+    
+    text_info = f"Тип: {msg['type']}\n"
+    if 'buttons' in msg:
+        text_info += f"Кнопок: {len(msg['buttons'])}"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Изменить контент", callback_data=f"rewrite_msg_{idx}")],
+        [InlineKeyboardButton(text="➕ Добавить кнопку", callback_data=f"add_btn_{idx}")],
+        [InlineKeyboardButton(text="❌ Удалить кнопки", callback_data=f"clear_btns_{idx}")],
+        [InlineKeyboardButton(text="🗑 Удалить сообщение", callback_data=f"del_msg_{idx}")],
+        [InlineKeyboardButton(text="◀️ Назад к списку", callback_data="admin_welcome_editor")],
+    ])
+    
+    await cb.message.edit_text(
+        f"🔧 <b>Редактирование сообщения №{idx+1}</b>\n\n{text_info}", 
+        reply_markup=kb
+    )
+
+@router.callback_query(F.data.startswith("rewrite_msg_"))
+async def rewrite_msg_start(cb: CallbackQuery, state: FSMContext):
+    idx = int(cb.data.split("_")[-1])
+    await state.update_data(editing_index=idx)
+    await state.set_state(AdminStates.waiting_for_content)
+    await cb.message.answer("Отправьте новый контент (Текст, Фото, Видео и т.д.) для замены:")
+    await cb.answer()
+
+# --- ОБРАБОТКА КОНТЕНТА (СОХРАНЕНИЕ) ---
+
+@router.message(AdminStates.waiting_for_content)
+async def save_content(msg: Message, state: FSMContext):
+    data = await state.get_data()
+    idx = data.get('editing_index') 
+    
+    # Определяем тип присланного
+    content_type = "text"
+    content = msg.text or msg.caption or ""
+    file_id = None
+    
+    if msg.photo:
+        content_type = "photo"
+        file_id = msg.photo[-1].file_id
+    elif msg.video:
+        content_type = "video"
+        file_id = msg.video.file_id
+    elif msg.video_note:
+        content_type = "video_note"
+        file_id = msg.video_note.file_id
+        content = "" # У кружочков нет подписи
+    elif msg.document:
+        content_type = "document"
+        file_id = msg.document.file_id
+    elif not msg.text:
+        await msg.answer("❌ Непонятный тип контента. Попробуйте снова.")
+        return
+
+    # Формируем объект сообщения
+    new_msg = {
+        "type": content_type,
+        "content": file_id if file_id else content, 
+        "caption": content if file_id else None,    
+        "buttons": [] 
+    }
+    
+    # Если редактируем старое - сохраняем кнопки
+    chain = await db.get_welcome_chain()
+    if idx is not None and 0 <= idx < len(chain):
+        new_msg['buttons'] = chain[idx].get('buttons', [])
+        chain[idx] = new_msg
+    else:
+        chain.append(new_msg)
+        
+    await db.save_welcome_chain(chain)
+    await state.clear()
+    await msg.answer("✅ Сохранено!", reply_markup=await get_chain_editor_kb(chain))
+
+# --- УПРАВЛЕНИЕ КНОПКАМИ ---
+
+@router.callback_query(F.data.startswith("add_btn_"))
+async def add_btn_start(cb: CallbackQuery, state: FSMContext):
+    idx = int(cb.data.split("_")[-1])
+    await state.update_data(btn_msg_index=idx)
+    await state.set_state(AdminStates.waiting_for_btn_name)
+    await cb.message.edit_text("🔤 Введите текст на кнопке:")
+
+@router.message(AdminStates.waiting_for_btn_name)
+async def save_btn_name(msg: Message, state: FSMContext):
+    await state.update_data(btn_name=msg.text)
+    await state.set_state(AdminStates.waiting_for_btn_url)
+    await msg.answer("🔗 Введите ссылку (начинается с http...):")
+
+@router.message(AdminStates.waiting_for_btn_url)
+async def save_btn_url(msg: Message, state: FSMContext):
+    if not msg.text.startswith("http"):
+        await msg.answer("Ссылка должна начинаться с http")
+        return
+
+    data = await state.get_data()
+    idx = data.get('btn_msg_index')
+    
+    chain = await db.get_welcome_chain()
+    if 0 <= idx < len(chain):
+        if 'buttons' not in chain[idx]: chain[idx]['buttons'] = []
+        chain[idx]['buttons'].append({"text": data['btn_name'], "url": msg.text})
+        await db.save_welcome_chain(chain)
+    
+    await state.clear()
+    await msg.answer("✅ Кнопка добавлена", reply_markup=await get_chain_editor_kb(chain))
+
+@router.callback_query(F.data.startswith("clear_btns_"))
+async def clear_btns(cb: CallbackQuery):
+    idx = int(cb.data.split("_")[-1])
+    chain = await db.get_welcome_chain()
+    if 0 <= idx < len(chain):
+        chain[idx]['buttons'] = []
+        await db.save_welcome_chain(chain)
+    await cb.answer("Кнопки удалены")
+    await admin_welcome_editor(cb, None) 
+
+@router.callback_query(F.data.startswith("del_msg_"))
+async def delete_msg(cb: CallbackQuery):
+    idx = int(cb.data.split("_")[-1])
+    chain = await db.get_welcome_chain()
+    if 0 <= idx < len(chain):
+        chain.pop(idx)
+        await db.save_welcome_chain(chain)
+    await cb.answer("Сообщение удалено")
+    await admin_welcome_editor(cb, None)
+
+# --- ТЕСТ ЦЕПОЧКИ ---
+@router.callback_query(F.data == "test_chain")
+async def test_chain(cb: CallbackQuery):
+    # Импорт ВНУТРИ функции, чтобы избежать циклического импорта
+    from .subscription import send_welcome_chain 
+    await cb.answer("Отправляю тест...")
+    await send_welcome_chain(cb.bot, cb.from_user.id)

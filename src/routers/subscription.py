@@ -26,21 +26,17 @@ router = Router()
 CHANNEL_USERNAME = "@sezaamankeldii"
 
 def subscription_kb() -> InlineKeyboardMarkup:
-    """Клавиатура для проверки подписки"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/sezaamankeldii")],
         [InlineKeyboardButton(text="✅ Уже подписана", callback_data="check_subscription")]
     ])
 
 async def is_subscribed(bot, user_id: int) -> bool:
-    """Проверка подписки пользователя на канал"""
+    """Проверка подписки"""
     try:
         member = await bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
         return member.status in ['creator', 'administrator', 'member']
-    except Exception as e:
-        # В проде безопаснее не резать флоу из-за ошибки проверки
-        print(f"⚠️  Ошибка проверки подписки: {e}")
-        print(f"⚠️  Убедитесь, что бот добавлен в канал {CHANNEL_USERNAME} как администратор!")
+    except Exception:
         return True
 
 async def send_start_album(msg: Message):
@@ -102,52 +98,41 @@ async def send_restore_sales_album(msg: Message):
 
 @router.message(CommandStart())
 async def cmd_start(msg: Message, state: FSMContext):
-    """Команда /start с проверкой подписки"""
     await state.clear()
-
-    uid = msg.from_user.id
-    username = msg.from_user.username
-    first = msg.from_user.first_name
-    last = msg.from_user.last_name
-
-    # Извлечение реферального тега
+    
     ref_tag = None
     if msg.text and " " in msg.text:
         ref_tag = msg.text.split(" ", 1)[1]
-
-    # Сохранение пользователя в БД
-    await db.upsert_user(uid, username, first, last, ref_tag)
-
-    # Сохранение реферала
-    if ref_tag:
-        await db.save_referral(uid, ref_tag)
-
+        
+    await db.upsert_user(
+        msg.from_user.id, 
+        msg.from_user.username, 
+        msg.from_user.first_name, 
+        msg.from_user.last_name, 
+        ref_tag
+    )
+    
     # Проверка подписки
-    if await is_subscribed(msg.bot, uid):
-        await send_restore_sales_album(msg)
-        await msg.answer("Выберите действие 👇", reply_markup=restore_sales_kb())
+    if await is_subscribed(msg.bot, msg.from_user.id):
+        # ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ ЦЕПОЧКИ
+        await send_welcome_chain(msg.bot, msg.chat.id)
     else:
         await msg.answer(SUBSCRIPTION_REQUIRED, reply_markup=subscription_kb())
 
 
-
 @router.callback_query(F.data == "check_subscription")
 async def check_subscription(cb: CallbackQuery):
-    uid = cb.from_user.id
-
-    if await is_subscribed(cb.bot, uid):
-        await cb.answer("✅ Отлично! Теперь ты с нами 🤍", show_alert=False)
-
-        await send_restore_sales_album(cb.message)
-        await cb.message.answer("Выберите действие 👇", reply_markup=restore_sales_kb())
-
+    if await is_subscribed(cb.bot, cb.from_user.id):
+        await cb.answer("✅ Подписка подтверждена!", show_alert=False)
         try:
-            await cb.message.edit_text("✅ Подписка подтверждена 🤍")
-        except Exception:
+            await cb.message.delete()
+        except:
             pass
+            
+        # ВЫЗЫВАЕМ НОВУЮ ФУНКЦИЮ ЦЕПОЧКИ
+        await send_welcome_chain(cb.bot, cb.message.chat.id)
     else:
-        await cb.answer("😔 Ты ещё не подписана. Подпишись и нажми снова!", show_alert=True)
-        await cb.message.edit_text(SUBSCRIPTION_NOT_FOUND, reply_markup=subscription_kb())
+        await cb.answer("❌ Вы еще не подписались на канал!", show_alert=True)
 
 async def send_siren_flow(msg: Message):
     """
@@ -202,3 +187,49 @@ async def download_pdf(cb: CallbackQuery):
             "💡 Изучай материал и применяй техники бережно!",
             reply_markup=main_kb()
         )
+
+# --- ОСНОВНАЯ ФУНКЦИЯ ОТПРАВКИ ЦЕПОЧКИ (НОВАЯ) ---
+async def send_welcome_chain(bot, chat_id: int):
+    """Отправляет ВСЮ цепочку сообщений по очереди"""
+    chain = await db.get_welcome_chain()
+    
+    if not chain:
+        # Если цепочка пустая, отправляем дефолт
+        await bot.send_message(chat_id, "Привет! (Контент настраивается)")
+        return
+
+    for msg in chain:
+        # 1. Собираем клавиатуру для конкретного сообщения
+        kb = None
+        if msg.get('buttons'):
+            rows = []
+            for btn in msg['buttons']:
+                rows.append([InlineKeyboardButton(text=btn['text'], url=btn['url'])])
+            kb = InlineKeyboardMarkup(inline_keyboard=rows)
+        
+        # 2. Отправляем в зависимости от типа
+        try:
+            m_type = msg.get('type', 'text')
+            content = msg.get('content')
+            caption = msg.get('caption')
+
+            if m_type == 'text':
+                await bot.send_message(chat_id, text=content, reply_markup=kb)
+                
+            elif m_type == 'photo':
+                await bot.send_photo(chat_id, photo=content, caption=caption, reply_markup=kb)
+                
+            elif m_type == 'video':
+                await bot.send_video(chat_id, video=content, caption=caption, reply_markup=kb)
+                
+            elif m_type == 'video_note': # Кружочек
+                await bot.send_video_note(chat_id, video_note=content, reply_markup=kb)
+                
+            elif m_type == 'document': # Файл (PDF и тд)
+                await bot.send_document(chat_id, document=content, caption=caption, reply_markup=kb)
+            
+            # Небольшая пауза, чтобы сообщения не перепутались местами
+            await asyncio.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Ошибка отправки части цепочки: {e}")

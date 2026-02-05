@@ -1,6 +1,7 @@
 import asyncpg
 import json
-from typing import Optional
+from typing import Optional, List, Dict, Any
+from .config import Config
 from datetime import datetime
 import os
 
@@ -234,3 +235,62 @@ async def get_all_users_full():
             order by created_at desc
         """)
         return [dict(r) for r in rows]
+
+async def set_config(key: str, value: str):
+    """Сохранение конфигурации в БД"""
+    if not _pool: return
+    async with _pool.acquire() as conn:
+        await conn.execute("""
+            insert into bot_config(key, value)
+            values($1, $2)
+            on conflict (key) do update set value = excluded.value
+        """, key, value)
+
+async def get_config(key: str) -> str|None:
+    """Получение конфигурации из БД"""
+    if not _pool: return None
+    async with _pool.acquire() as conn:
+        row = await conn.fetchrow("select value from bot_config where key = $1", key)
+        return row['value'] if row else None
+
+async def get_welcome_settings() -> Dict[str, Any]:
+    """Получить настройки приветствия (текст, фото, кнопки)"""
+    raw_json = await get_config("WELCOME_SETTINGS")
+    if not raw_json:
+        # Дефолтные настройки, если в базе пусто
+        return {
+            "text": "Привет! 👋\nЯ помогу тебе бережно включить тело.\n\nЖми кнопку ниже, чтобы начать.",
+            "photo_id": None,
+            "buttons": [] # Список словарей: {"text": "...", "url": "...", "type": "url/callback"}
+        }
+    try:
+        return json.loads(raw_json)
+    except:
+        return {}
+
+async def save_welcome_settings(settings: Dict[str, Any]):
+    """Сохранить настройки приветствия"""
+    await set_config("WELCOME_SETTINGS", json.dumps(settings, ensure_ascii=False))
+
+async def get_welcome_chain() -> List[Dict[str, Any]]:
+    """Получить цепочку приветственных сообщений"""
+    raw_json = await get_config("WELCOME_CHAIN")
+    if not raw_json:
+        # Дефолт: одно текстовое сообщение
+        return [{
+            "type": "text",
+            "content": "Привет! 👋\nРада тебя видеть.",
+            "buttons": []
+        }]
+    try:
+        data = json.loads(raw_json)
+        # Если вдруг в базе старый формат (словарь), превращаем в список
+        if isinstance(data, dict):
+            return [data]
+        return data
+    except:
+        return []
+
+async def save_welcome_chain(chain: List[Dict[str, Any]]):
+    """Сохранить всю цепочку"""
+    await set_config("WELCOME_CHAIN", json.dumps(chain, ensure_ascii=False))
